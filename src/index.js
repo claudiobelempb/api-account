@@ -27,6 +27,12 @@ function verifyIfExistsAccountId(request, response, next) {
   return next();
 }
 
+function getBalance(statement) {
+  const isBalance = (acc, operation) => (operation.type === 'credit') ? acc += parseInt(operation.amount) : acc -= parseInt(operation.amount);
+  const balance = statement.reduce(isBalance, 0);
+  return balance;
+}
+
 app.get('/account', (request, response) => {
   return response.status(200).json(customers);
 });
@@ -87,6 +93,30 @@ app.post('/deposit', verifyIfExistsAccountId, (request, response) => {
   customer.statement.push(customerOperation);
 
   return response.status(201).json(customer);
+
+
+});
+
+app.post('/withdraw', verifyIfExistsAccountId, (request, response) => {
+  const { amount } = request.body;
+  const { customer } = request;
+
+  const balance = getBalance(customer.statement);
+  console.log(balance);
+  
+  if(balance < amount) {
+    return response.status(400).json({error: 'Saldo insuficiente'});
+  }
+
+  const customerOperation = {
+    amount,
+    created_at: new Date(),
+    type: 'saque'
+  }
+
+  customer.statement.push(customerOperation);
+
+  return response.status(201).json({customer, balance});
 
 });
 
