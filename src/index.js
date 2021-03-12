@@ -1,5 +1,5 @@
 const express = require('express')
-const { v4: uuid, stringify} = require('uuid');
+const { v4: uuid } = require('uuid');
 
 const app = express();
 app.use(express.json());
@@ -28,10 +28,18 @@ function verifyIfExistsAccountId(request, response, next) {
 }
 
 function getBalance(statement) {
-  const isBalance = (acc, operation) => (operation.type === 'credit') ? acc += parseInt(operation.amount) : acc -= parseInt(operation.amount);
-  const balance = statement.reduce(isBalance, 0);
-  return balance;
+  const balance = statement.reduce( function(acc, operation)  {
+    console.log(`Acc: ${acc} Operation: ${operation.amount}`);
+    if(operation.type === 'credit'){
+      return acc + operation.amount;
+    }else{
+      return acc - operation.amount;
+    }
+  }, 0);
+
+  return balance.operation;
 }
+
 
 app.get('/account', (request, response) => {
   return response.status(200).json(customers);
@@ -71,6 +79,39 @@ app.post('/account', (request, response) => {
   return response.status(201).json(customer);
 });
 
+app.put('/account', verifyIfExistsAccountId, (request, response) => {
+
+  const { name } = request.body;
+  const { customer } = request;
+
+  customer.name = name;
+
+  return response.status(201).send();
+
+});
+
+app.delete('/account', verifyIfExistsAccountId, (request, response) => {
+  
+  const { customer } = request;
+
+  customers.splice(customer, 1);
+
+  return response.status(204).send();
+
+});
+
+app.get('/balance', verifyIfExistsAccountId, (request, response) => {
+
+  const { customer } = request;
+
+  const balance = getBalance(customer.statement);
+
+  console.log(balance);
+
+  return response.json(balance);
+  
+});
+
 app.get('/statement', verifyIfExistsAccountId, (request, response) => {
 
   const { customer } = request;
@@ -79,9 +120,25 @@ app.get('/statement', verifyIfExistsAccountId, (request, response) => {
 
 });
 
+app.get('/statement/date', verifyIfExistsAccountId, (request, response) => {
+
+  const { customer } = request;
+
+  const { date } = request.query;
+
+  const dateFormat = new Date(`${date} 00:00`);
+
+  const statement = customer.statement.filter((statement) => statement.created_at.toDateString() === new Date(dateFormat).toDateString());
+
+  return response.json(statement);
+
+});
+
 app.post('/deposit', verifyIfExistsAccountId, (request, response) => {
   const { description, amount } = request.body;
   const { customer } = request;
+
+  const balance = getBalance(customer.statement);
 
   const customerOperation = {
     description,
@@ -92,29 +149,29 @@ app.post('/deposit', verifyIfExistsAccountId, (request, response) => {
 
   customer.statement.push(customerOperation);
 
-  return response.status(201).json(customer);
-
+  return response.status(201).json({customer, balance});
 
 });
 
 app.post('/withdraw', verifyIfExistsAccountId, (request, response) => {
-  const { amount } = request.body;
+  const { description, amount } = request.body;
   const { customer } = request;
+  console.log(customer);
 
   const balance = getBalance(customer.statement);
-  console.log(balance);
-  
+
   if(balance < amount) {
-    return response.status(400).json({error: 'Saldo insuficiente'});
+    return response.status(400).json({error: `Insufficient funds ${amount}`});
   }
 
-  const customerOperation = {
+  const statementOperation = {
+    description,
     amount,
     created_at: new Date(),
-    type: 'saque'
+    type: 'debit'
   }
 
-  customer.statement.push(customerOperation);
+  customer.statement.push(statementOperation);
 
   return response.status(201).json({customer, balance});
 
